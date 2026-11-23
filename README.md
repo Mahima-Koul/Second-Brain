@@ -1,192 +1,104 @@
 # Second Brain
 
-A productivity hub that combines a **to-do list**, a **planner**, and a **habit tracker** in one system.
+Second Brain is a task planner built around one idea: scheduling a task should not turn it into a calendar event. Scheduled items keep their task checkbox, completion state, and ability to move or unschedule them.
 
-Most to-do apps only store tasks. Google Calendar schedules things, but treats everything as an event. Second Brain does both: you can give a task a time slot on the planner, and it **stays a task**, with a checkbox, a done state, and the ability to be moved or unscheduled.
+**Current scope:** Google sign-in, task management, subtasks, and a Day/Week planner. Habit and event tables are included in the database schema, but their user interfaces are not part of the current release.
 
-> **Status:** Phase 2 complete (Tasks + Planner). Habits, Events, and AI features are coming next.
+## Features
 
----
+- Google-only authentication through Supabase Auth
+- Protected application routes and account sign-out
+- Task views for Today, Upcoming, All tasks, and Completed
+- Due dates, notes, priorities, and scheduled times
+- Subtasks with inline progress and automatic parent completion behavior
+- Day and Monday-starting Week planner with drag-and-drop scheduling
+- Resizing task blocks, overlap layout, and an unscheduled task panel
+- Effective dates use the browser's local date for scheduled tasks and the due date otherwise
 
-## Features (so far)
+## Technology
 
-### Phase 1: Foundation
-- Google-only login (Supabase Auth)
-- Protected routes with a logout menu and avatar
-- Tasks page with four views: **Today**, **Upcoming**, **All tasks**, **Completed**
-- Priorities (P1 / P2 / P3), due dates, notes
-- Optimistic UI for instant add, edit, and tick
-- Todoist-style design with a collapsible sidebar and a responsive mobile drawer
+- Next.js App Router and TypeScript
+- Tailwind CSS
+- Supabase Auth and Postgres with row-level security
+- `@supabase/ssr`
+- `@dnd-kit/core` for planner drag and drop
+- `lucide-react` icons
 
-### Phase 2: Planner and scheduling
-- Bottom add bar on Today and All tasks, with date, start time, end time (or duration), priority, and subtasks
-- **Subtasks:** finishing the last subtask completes the parent task, and ticking the parent completes all subtasks
-- **Planner** (`/planner`) with Day and Week views on a custom-built time grid
-- Drag tasks from the **Unscheduled** panel onto a time slot, move them between slots and days, resize them, or drag them back to unschedule
-- Tasks look different from events: white blocks with a priority-colored left border and a checkbox
-- Overlapping tasks are laid out side by side
-- A "Missed" style for scheduled tasks that ended without being completed
-- Current-time indicator on today's column
+## Requirements
 
-### The "effective date" rule
-A task's effective date is the local date of `scheduled_start` if it is scheduled, and its `due_date` otherwise. Today, Upcoming, and overdue logic all use it, so a task you schedule in the planner for 6 PM today also shows on the Today page.
+- Node.js and npm
+- A Supabase project
+- A Google Cloud project with OAuth credentials
 
----
+## Local setup
 
-## Tech stack
+1. Install dependencies:
 
-| Area | Choice |
+   ```bash
+   npm install
+   ```
+
+2. In the Supabase SQL Editor, run the canonical schema at [`sql/schema.sql`](sql/schema.sql). It creates the Phase 1 and Phase 2 tables, indexes, row-level security policies, and authenticated-role grants. Keep future database changes in this file.
+
+3. Configure Google OAuth:
+   - In Google Cloud Console, set up the OAuth consent screen and create a **Web application** OAuth client.
+   - Add `http://localhost:3000` as an authorized JavaScript origin.
+   - Add your Supabase callback URL as an authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`.
+   - In Supabase, enable **Authentication → Providers → Google** and enter the Google client ID and secret.
+   - In **Authentication → URL Configuration**, set the Site URL to `http://localhost:3000` and allow `http://localhost:3000/auth/callback` as a redirect URL.
+
+4. Copy `.env.example` to `.env.local` and enter the Supabase project URL and anon/publishable key:
+
+   ```dotenv
+   NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-or-publishable-key>
+   ```
+
+   Do not put a Supabase `service_role` key in frontend environment variables. `.env.local` is gitignored.
+
+5. Start the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+6. Open [http://localhost:3000](http://localhost:3000).
+
+## Routes
+
+| Route | Description |
 |---|---|
-| Framework | Next.js (App Router) + TypeScript |
-| Styling | Tailwind CSS |
-| Auth and database | Supabase (Google OAuth, Postgres, Row Level Security) |
-| Drag and drop | `@dnd-kit/core` |
-| Icons | `lucide-react` |
-| Hosting | Vercel |
+| `/login` | Google sign-in |
+| `/tasks?view=today` | Tasks due today or overdue by effective date |
+| `/tasks?view=upcoming` | Future tasks grouped by effective date |
+| `/tasks?view=all` | All uncompleted tasks, including undated tasks |
+| `/tasks?view=completed` | Completed tasks |
+| `/planner?view=week&date=YYYY-MM-DD` | Weekly task planner; `view=day` selects Day view |
 
----
+## Database source of truth
 
-## Getting started
+[`sql/schema.sql`](sql/schema.sql) is the single maintained SQL schema file. Run it in the Supabase SQL Editor when setting up a project or applying schema updates. It includes `vector`, `habits`, `tasks`, `habit_logs`, `events`, and `subtasks`, plus indexes, RLS policies, and grants.
 
-### 1. Install
+## Deploying
 
-```bash
-npm install
+1. Import the repository into Vercel and add the two environment variables from `.env.example`.
+2. In Supabase URL Configuration, set the production Site URL and add `https://<your-domain>/auth/callback` to allowed redirect URLs. Keep the localhost URL for development.
+3. Add the production site origin to the Google OAuth client's authorized JavaScript origins. The authorized redirect URI remains the Supabase Auth callback URL.
+4. Deploy the application.
+
+Database SQL is managed separately from Vercel deployments; apply schema updates in Supabase before deploying code that depends on them.
+
+## Project structure
+
+```text
+app/                 Next.js routes and global styles
+components/          Tasks, planner, and shared task-entry UI
+lib/                 Supabase clients and task/planner data access
+sql/schema.sql       Canonical database schema
 ```
-
-### 2. Create a Supabase project
-
-Create a free project at [supabase.com](https://supabase.com).
-
-### 3. Set up the database
-
-In Supabase, open **SQL Editor** and run, in this order:
-
-1. **The Phase 1 schema SQL file** (creates `tasks`, `habits`, `habit_logs`, `events`, with Row Level Security and policies).
-2. **Table grants** (the `authenticated` role needs table access on top of RLS):
-
-```sql
-grant usage on schema public to authenticated;
-grant select, insert, update, delete on public.tasks to authenticated;
-grant select, insert, update, delete on public.habits to authenticated;
-grant select, insert, update, delete on public.habit_logs to authenticated;
-grant select, insert, update, delete on public.events to authenticated;
-```
-
-3. **Phase 2 subtasks table:**
-
-```sql
-create table if not exists public.subtasks (
-  id uuid primary key default gen_random_uuid(),
-  task_id uuid not null references public.tasks(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  title text not null,
-  done boolean not null default false,
-  position int not null default 0,
-  created_at timestamptz default now()
-);
-
-alter table public.subtasks enable row level security;
-
-create policy "own subtasks select" on public.subtasks for select using (user_id = auth.uid());
-create policy "own subtasks insert" on public.subtasks for insert with check (user_id = auth.uid());
-create policy "own subtasks update" on public.subtasks for update using (user_id = auth.uid());
-create policy "own subtasks delete" on public.subtasks for delete using (user_id = auth.uid());
-
-grant select, insert, update, delete on public.subtasks to authenticated;
-create index if not exists subtasks_task_id_idx on public.subtasks(task_id);
-
-notify pgrst, 'reload schema';
-```
-
-### 4. Set up Google login
-
-1. In [Google Cloud Console](https://console.cloud.google.com), configure the OAuth consent screen with **External** audience, and add your Gmail as a **test user**.
-2. Create an **OAuth client ID** of type **Web application**:
-   - **Authorized JavaScript origins:** `http://localhost:3000` (and your Vercel URL later)
-   - **Authorized redirect URI:** `https://<your-project-ref>.supabase.co/auth/v1/callback` (copy it from Supabase → Authentication → Providers → Google)
-3. In Supabase → Authentication → Providers → **Google**, enable it and paste the Client ID and Client Secret.
-4. In Supabase → Authentication → **URL Configuration**:
-   - **Site URL:** `http://localhost:3000`
-   - **Redirect URLs:** `http://localhost:3000/**`
-
-### 5. Environment variables
-
-Copy `.env.example` to `.env.local` and fill it in:
-
-```
-NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your anon / publishable key>
-```
-
-Use the variable names from your own `.env.example` if they differ. Never use the `service_role` key here, and never commit `.env.local`.
-
-### 6. Run
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
----
-
-## Deploying to Vercel
-
-1. Push the repo to GitHub (private is fine, and make sure `.env.local` is gitignored).
-2. On [vercel.com](https://vercel.com), choose **Add New → Project**, import the repo, and add the same environment variables.
-3. Deploy.
-4. Update the login settings with your live URL:
-   - **Supabase** → URL Configuration: set the Site URL to your Vercel URL and add `https://your-app.vercel.app/**` to Redirect URLs (keep the localhost one).
-   - **Google Cloud** → OAuth client → add your Vercel URL to **Authorized JavaScript origins**.
-5. Every `git push` to `main` redeploys automatically.
-
-> **Note:** SQL changes are never deployed by git. Run them manually in the Supabase SQL editor *before* pushing code that depends on them.
-
----
-
-## Data model
-
-| Table | Purpose |
-|---|---|
-| `tasks` | Title, notes, status, priority, due date, `scheduled_start`, `scheduled_minutes`, optional `habit_id` and `embedding` |
-| `subtasks` | Checklist items under a task (Phase 2) |
-| `habits` | Repeating tasks (UI in Phase 3) |
-| `habit_logs` | One row per habit per day (Phase 3) |
-| `events` | Calendar events (UI in Phase 4) |
-
-All tables have Row Level Security: users can only access their own rows.
-
----
-
-## Troubleshooting
-
-| Error | Cause and fix |
-|---|---|
-| `Error 401: invalid_client` on login | The Client ID in Supabase is wrong or has stray spaces. Re-copy it from Google Cloud. |
-| `redirect_uri_mismatch` | The redirect URI in Google must exactly match the Supabase callback URL. |
-| `Access blocked` | Your email isn't in the Google **test users** list. |
-| `42501 permission denied for table ...` | Run the table grants SQL above. |
-| `PGRST205 Could not find the table ...` | The table doesn't exist yet. Run the SQL, then `notify pgrst, 'reload schema';`. |
-| `Invalid API key` or `supabaseUrl is required` | Check `.env.local` for typos, then restart `npm run dev`. |
-| Env var changes not applying on Vercel | Redeploy from the Deployments tab after changing env vars. |
-
----
 
 ## Roadmap
 
-- [x] **Phase 1:** Auth, schema, Tasks page
-- [x] **Phase 2:** Planner, drag and drop scheduling, subtasks, start/end times
-- [ ] **Phase 3:** Habits, with streaks, completion rate, and a heatmap
-- [ ] **Phase 4:** Events, shown in the planner
-- [ ] **Phase 5:** AI features
-  - Semantic task search (pgvector embeddings)
-  - Describe tasks vaguely and get a preview list of structured tasks to confirm and add
-
----
-
-## Project notes
-
-- Week starts on **Monday** (a single constant in the code).
-- Times are displayed in the browser's local timezone and stored as `timestamptz`.
-- The planner grid is built by hand with CSS and absolute positioning, with no calendar library.
+- **Current:** Authentication, tasks, subtasks, and planner
+- **Planned:** Habit tracking and event management
+- **Future:** AI-assisted task workflows
